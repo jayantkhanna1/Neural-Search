@@ -31,11 +31,11 @@ DEBUG = True
 ALLOWED_HOSTS = ['*']
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:8000',
-    'https://neural_search.jayantkhanna.in',
+    'https://neural.jayantkhanna.in',
     'http://localhost:9630',
 ]
 
-
+CSRF_TRUSTED_ORIGINS = ['neural.jayantkhanna.in']
 # Application definition
 
 INSTALLED_APPS = [
