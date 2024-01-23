@@ -29,6 +29,11 @@ SECRET_KEY = 'django-insecure-#8se5l(t3b!ln4xpy)#us5vo(@5x)5-+e_(=q^%furqt_z(x=7
 DEBUG = True
 
 ALLOWED_HOSTS = ['*']
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:8000',
+    'https://neural_search.jayantkhanna.in',
+    'http://localhost:9630',
+]
 
 
 # Application definition
