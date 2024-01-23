@@ -1,0 +1,42 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neural Search</title>
+
+    <link rel="stylesheet" href="{% static 'css/index.css' %}">
+</head>
+<body>
+    <div id="form">
+        <p>{{group.group}}</p>
+        <p>{{group.threshold_value}}</p>
+        <p>{{group.num_results}}</p>
+        <div id="queries">
+            {% for query in queries %}
+                <p>{{query.query}}</p>
+            {% endfor %}
+        </div>
+        <div id="imp_words">
+            {% for word in required_data %}
+            <div class="word">
+                <p>{{word.word}}</p>
+                <p>{{word.score}}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div id="links">
+        {% for x in jobs %}
+        <a href="{{x.url}}" target="_blanc">{{x.url}}</a>
+        {% endfor %}
+    </div>
+
+    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+
+
+    
+</body>
+</html>

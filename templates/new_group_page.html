@@ -1,0 +1,111 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neural Search</title>
+
+    <link rel="stylesheet" href="{% static 'css/index.css' %}">
+</head>
+<body>
+    <div id="form">
+        <input type="text" name="group_name" placeholder="Group Name">
+        <input type="number" name="threshhold_value" id="threshhold_value" placeholder="Threshhold Value (1 - 100)">
+        <input type="number" name="max_query" id="max_query" placeholder="Maximum hits per query (1 - 100)">
+        <div id="queries">
+            <input type="text" name="query" id="query1" placeholder="Enter your google query">
+        </div>
+        <button onclick="add_query()">Add Query</button>
+        <div id="imp_words">
+            <div class="word">
+                <input type="text" name="imp_word" id="imp_word1" placeholder="Important Word">
+                <input type="number" name="score" id="score1" placeholder="score Of the word (1 - 100)">
+            </div>
+        </div>
+        <button onclick="add_word()">Add Word</button>
+        <button onclick="create_group()">Create Group</button>
+    </div>
+
+    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+
+
+    <script>
+        function add_query(){
+            var query = document.getElementById("queries");
+            var query_count = query.childElementCount;
+            var new_query = document.createElement("input");
+            new_query.setAttribute("type", "text");
+            new_query.setAttribute("name", "query");
+            new_query.setAttribute("id", "query"+(query_count+1));
+            new_query.setAttribute("placeholder", "Query");
+            query.appendChild(new_query);
+        }
+        function add_word(){
+            var word = document.getElementById("imp_words");
+            var word_count = word.childElementCount;
+            var new_word = document.createElement("div");
+            new_word.setAttribute("class", "word");
+            var new_word_input = document.createElement("input");
+            new_word_input.setAttribute("type", "text");
+            new_word_input.setAttribute("name", "imp_word");
+            new_word_input.setAttribute("id", "imp_word"+(word_count+1));
+            new_word_input.setAttribute("placeholder", "Important Word");
+            var new_word_score = document.createElement("input");
+            new_word_score.setAttribute("type", "number");
+            new_word_score.setAttribute("name", "score");
+            new_word_score.setAttribute("id", "score"+(word_count+1));
+            new_word_score.setAttribute("placeholder", "Score");
+            new_word.appendChild(new_word_input);
+            new_word.appendChild(new_word_score);
+            word.appendChild(new_word);
+        }
+    </script>
+
+    <script>
+        function create_group(){
+            var formData = new FormData();
+            var group_name = document.getElementsByName("group_name")[0].value;
+            var threshhold_value = document.getElementById("threshhold_value").value;
+            var max_query = document.getElementById("max_query").value;
+            var queries = document.getElementsByName("query");
+            var imp_words = document.getElementsByName("imp_word");
+            var scores = document.getElementsByName("score");
+            var json_for_imp_words = []
+            for (var i =0; i<imp_words.length; i++){
+                var temp = {
+                    "word": imp_words[i].value,
+                    "score": scores[i].value
+                }
+                json_for_imp_words.push(temp);
+            }
+            queries = Array.from(queries).map(function(query){
+                return query.value;
+            });
+            formData.append("group_name", group_name);
+            formData.append("threshhold_value", threshhold_value);
+            formData.append("max_query", max_query);
+            formData.append("queries", JSON.stringify(queries));
+            console.log(JSON.stringify(queries));
+            console.log(queries);
+            formData.append("imp_words", JSON.stringify(json_for_imp_words));
+            formData.append("csrfmiddlewaretoken", "{{ csrf_token }}");
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", "create_group", true);
+            xhr.send(formData);
+            xhr.onload = function(){
+                if (xhr.status == 200){
+                    // Open home page
+                    window.location.href = window.location.origin;
+                }
+                else{
+                    alert("Error");
+                }
+            }
+
+        }
+    </script>
+
+    
+</body>
+</html>
