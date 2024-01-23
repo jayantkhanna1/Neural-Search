@@ -35,7 +35,7 @@ CORS_ALLOWED_ORIGINS = [
     'http://localhost:9630',
 ]
 
-CSRF_TRUSTED_ORIGINS = ['neural.jayantkhanna.in']
+CSRF_TRUSTED_ORIGINS = ['https://neural.jayantkhanna.in']
 # Application definition
 
 INSTALLED_APPS = [
