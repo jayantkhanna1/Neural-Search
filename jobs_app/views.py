@@ -43,4 +43,6 @@ def group_page(request):
     queries = Queries.objects.filter(group=group_id)
     required_data = RequiredData.objects.filter(group=group_id)
     jobs = Jobs.objects.filter(group=group_id)
+    # reverse jobs
+    jobs = jobs[::-1]
     return render(request,'group_page.html',{'group':group,'queries':queries,'required_data':required_data,'jobs':jobs})
