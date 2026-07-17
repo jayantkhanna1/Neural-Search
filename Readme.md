@@ -1,82 +1,114 @@
+# Neural Search — AI Research Assistant
 
-# Neural Search Application
+An AI-powered research assistant built with Django, Celery and the Anthropic API.
+You give it a topic; it expands the query with Claude Haiku, performs deep
+background web research, filters and ranks the sources, summarizes the findings,
+and then lets you **chat with the gathered knowledge** (RAG) — including asking
+it to research additional topics inside the same conversation.
 
-## Overview
-The Neural Search Application is a Django-based web application that uses AI to crawl the internet in the background and retrieve links related to a user query. It leverages neural search algorithms to provide highly relevant results based on a specified matching threshold.
+## How it works
 
-## Features
-- **AI-Powered Search**: Uses neural networks to analyze and match query intent.
-- **Background Crawling**: Performs internet crawling as a background job for scalability.
-- **Custom Threshold Filtering**: Users can set a matching threshold for result relevance.
-- **Asynchronous Processing**: Ensures smooth user experience with background task handling.
+```
+User query
+   │
+   ▼
+1. Query expansion (Claude Haiku) ─ generates 5 related search queries
+   │
+   ▼
+2. Background research (Celery task)
+   ├─ Web search per query (DuckDuckGo, Google fallback, cached, throttled)
+   ├─ Polite fetching (robots.txt, per-domain rate limiting, HTTP retries)
+   └─ Main-content extraction (nav/ads/boilerplate stripped)
+   │
+   ▼
+3. Relevance filtering (Claude Haiku, batched) ─ drops spam, duplicates,
+   off-topic and low-quality pages; ranks kept sources by quality
+   │
+   ▼
+4. Summarization (Claude Haiku)
+   ├─ per-source summaries
+   └─ consolidated research brief (key findings, insights, references)
+   │
+   ▼
+5. Chat with research (RAG)
+   ├─ sources chunked + indexed, retrieved with BM25 per question
+   ├─ follow-up questions answered from the knowledge base
+   └─ "research X" in chat launches additional background research
+      into the same session (tool use)
+```
 
-## Requirements
-- Python 3.x
-- Django 4.x
-- Celery
-- Redis
-- Requests
-- BeautifulSoup4
-- Django Channels
+## Project structure
 
-## Installation
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd neural-search-app
-   ```
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Configure environment variables in `.env`:
-   ```plaintext
-   DJANGO_SECRET_KEY=<your-secret-key>
-   REDIS_URL=redis://localhost:6379/0
-   ```
-4. Run migrations:
-   ```bash
-   python manage.py migrate
-   ```
-5. Start Redis server:
-   ```bash
-   redis-server
-   ```
-6. Start Celery worker:
-   ```bash
-   celery -A app_name worker --loglevel=info
-   ```
-7. Start the server:
-   ```bash
-   python manage.py runserver
-   ```
+```
+neural_search/          Django project (settings, celery app, urls)
+research/
+  models.py             ResearchSession, ResearchTask, Source, DocumentChunk, ChatMessage
+  tasks.py              Celery research pipeline with staged progress reporting
+  views.py / urls.py    JSON API + frontend page
+  services/
+    anthropic_client.py Anthropic SDK wrapper (retries, structured outputs)
+    query_expansion.py  Haiku-based query expansion (cached)
+    search.py           Search providers with caching, throttling, fallback
+    scraper.py          robots.txt, per-domain rate limits, content extraction
+    relevance.py        Haiku relevance filtering + quality ranking
+    summarizer.py       Per-source + consolidated summaries
+    chunking.py         Overlapping text chunking for RAG
+    retrieval.py        BM25 retrieval over session chunks
+    chat.py             RAG chat with a tool for launching more research
+templates/index.html    Single-page frontend
+static/                 CSS + JS for the frontend
+```
 
-## Usage
-1. Open the application in your browser:
-   ```
-   http://127.0.0.1:8000/
-   ```
-2. Enter your query and matching threshold.
-3. Submit the query to initiate the search.
-4. View results once the background job is complete.
+## Setup
 
-## API Endpoints
-- **POST /search**: Submits a search query.
-  - Parameters:
-    - `query` (string): The search term.
-    - `threshold` (float): Matching relevance threshold.
-- **GET /results/{query_id}**: Fetches results for a specific query.
+Requirements: Python 3.11+, Redis.
 
-## Contributing
-1. Fork the repository.
-2. Create a new branch:
-   ```bash
-   git checkout -b feature-branch
-   ```
-3. Commit changes and push:
-   ```bash
-   git commit -m "Add new feature"
-   git push origin feature-branch
-   ```
-4. Submit a pull request.
+```bash
+pip install -r requirements.txt
+cp .env.example .env          # then set ANTHROPIC_API_KEY
+python manage.py migrate
+```
 
+Run the three processes:
+
+```bash
+redis-server                                          # broker/cache
+celery -A neural_search worker --loglevel=info        # research worker
+python manage.py runserver                            # web app -> http://127.0.0.1:8000
+```
+
+By default SQLite is used; set `DB_NAME`/`DB_USER`/... for PostgreSQL.
+
+## API
+
+| Method | Path                              | Purpose                                   |
+|--------|-----------------------------------|-------------------------------------------|
+| POST   | `/api/research/`                  | `{query}` → create session + start research |
+| GET    | `/api/sessions/`                  | List sessions                             |
+| GET    | `/api/sessions/<id>/`             | Session status, progress, summary, sources, chat history |
+| POST   | `/api/sessions/<id>/research/`    | `{query}` → additional research in a session |
+| POST   | `/api/sessions/<id>/chat/`        | `{message}` → RAG chat reply              |
+
+## Reliability notes
+
+- **Anthropic API**: SDK-level retries with backoff; structured outputs
+  (JSON schema) for machine-read responses; typed error handling; graceful
+  degradation (e.g. query expansion failure falls back to the original query).
+- **Web politeness**: robots.txt honored (cached per domain), per-domain
+  request delays, global search-provider throttling, HTTP retries for
+  429/5xx with `Retry-After` support.
+- **Celery**: late acks, per-task time limits, retry with exponential backoff
+  for infrastructure errors, idempotency guard against duplicate delivery.
+- **Deduplication**: URLs deduped per session; content deduped by normalized
+  content hash (catches mirrors).
+- **Caching**: search results and expanded queries cached (Redis when
+  configured), robots.txt cached 24h.
+- **Token efficiency**: relevance judged on excerpts in batches; summaries
+  built from bounded excerpts; the final brief consolidates per-source
+  summaries instead of raw pages.
+
+## Tests
+
+```bash
+python manage.py test
+```
