@@ -164,24 +164,44 @@ ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5")
 RESEARCH = {
     # Query expansion
     "EXPANDED_QUERIES": env_int("RESEARCH_EXPANDED_QUERIES", 5),
+    # Iterative research loop
+    "MAX_ROUNDS": env_int("RESEARCH_MAX_ROUNDS", 2),
+    "GAP_QUERIES": env_int("RESEARCH_GAP_QUERIES", 3),
+    # Token budget per research task (input+output across all LLM calls in the
+    # search/filter/summarize rounds; finalization runs outside the budget).
+    "TASK_TOKEN_BUDGET": env_int("RESEARCH_TASK_TOKEN_BUDGET", 400_000),
     # Web search
     "RESULTS_PER_QUERY": env_int("RESEARCH_RESULTS_PER_QUERY", 8),
     "MAX_URLS_PER_TASK": env_int("RESEARCH_MAX_URLS_PER_TASK", 30),
     "SEARCH_CACHE_TTL": env_int("RESEARCH_SEARCH_CACHE_TTL", 3600),
+    "TAVILY_API_KEY": os.getenv("TAVILY_API_KEY", ""),
+    "BRAVE_API_KEY": os.getenv("BRAVE_API_KEY", ""),
     # Fetching / politeness
     "FETCH_TIMEOUT": env_int("RESEARCH_FETCH_TIMEOUT", 20),
+    "FETCH_CONCURRENCY": env_int("RESEARCH_FETCH_CONCURRENCY", 8),
     "PER_DOMAIN_DELAY": float(os.getenv("RESEARCH_PER_DOMAIN_DELAY", "2.0")),
     "RESPECT_ROBOTS": env_bool("RESEARCH_RESPECT_ROBOTS", True),
     "MAX_CONTENT_CHARS": env_int("RESEARCH_MAX_CONTENT_CHARS", 40000),
     "MIN_CONTENT_CHARS": env_int("RESEARCH_MIN_CONTENT_CHARS", 400),
+    "MAX_PDF_BYTES": env_int("RESEARCH_MAX_PDF_BYTES", 15_000_000),
+    # Renders JS-heavy pages with Playwright when static fetching yields too
+    # little text. Requires `pip install playwright && playwright install chromium`.
+    "ENABLE_BROWSER": env_bool("RESEARCH_ENABLE_BROWSER", False),
     # Relevance filtering
     "RELEVANCE_THRESHOLD": float(os.getenv("RESEARCH_RELEVANCE_THRESHOLD", "0.55")),
     "RELEVANCE_BATCH_SIZE": env_int("RESEARCH_RELEVANCE_BATCH_SIZE", 6),
+    # Summarization
+    "USE_BATCH_SUMMARIES": env_bool("RESEARCH_USE_BATCH_SUMMARIES", False),
     # RAG
     "CHUNK_SIZE": env_int("RESEARCH_CHUNK_SIZE", 1400),
     "CHUNK_OVERLAP": env_int("RESEARCH_CHUNK_OVERLAP", 200),
     "RAG_TOP_K": env_int("RESEARCH_RAG_TOP_K", 8),
     "CHAT_HISTORY_TURNS": env_int("RESEARCH_CHAT_HISTORY_TURNS", 12),
+    # Contextual retrieval: prepend a model-written situating line to each chunk.
+    "CONTEXTUAL_CHUNKS": env_bool("RESEARCH_CONTEXTUAL_CHUNKS", True),
+    # Embeddings (hybrid retrieval) — enabled when a Voyage AI key is present.
+    "VOYAGE_API_KEY": os.getenv("VOYAGE_API_KEY", ""),
+    "VOYAGE_MODEL": os.getenv("VOYAGE_MODEL", "voyage-3.5-lite"),
 }
 
 # ---------------------------------------------------------------------------

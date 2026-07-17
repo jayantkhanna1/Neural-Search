@@ -1,8 +1,12 @@
+from datetime import datetime, timedelta, timezone
+
 from django.test import TestCase
 
 from .models import DocumentChunk, ResearchSession, ResearchTask, Source
 from .services.chunking import chunk_text
+from .services.relevance import quality_score
 from .services.retrieval import retrieve, tokenize
+from .services.scraper import _parse_date
 
 
 class ChunkingTests(TestCase):
@@ -55,6 +59,52 @@ class RetrievalTests(TestCase):
     def test_retrieval_empty_session(self):
         empty = ResearchSession.objects.create(title="empty")
         self.assertEqual(retrieve(empty.id, "anything", top_k=5), [])
+
+
+class QualityScoreTests(TestCase):
+    def test_fresh_source_outranks_stale_source(self):
+        now = datetime.now(timezone.utc)
+        fresh = quality_score("https://example.org/a", 0.8, 5000, now - timedelta(days=10))
+        stale = quality_score("https://example.org/b", 0.8, 5000, now - timedelta(days=1500))
+        undated = quality_score("https://example.org/c", 0.8, 5000, None)
+        self.assertGreater(fresh, stale)
+        self.assertGreaterEqual(fresh, undated)
+
+    def test_score_bounded(self):
+        score = quality_score("https://arxiv.org/abs/1", 1.0, 100000, datetime.now(timezone.utc))
+        self.assertLessEqual(score, 1.0)
+
+
+class DateParsingTests(TestCase):
+    def test_iso_datetime(self):
+        parsed = _parse_date("2026-03-14T09:26:53Z")
+        self.assertEqual((parsed.year, parsed.month, parsed.day), (2026, 3, 14))
+        self.assertIsNotNone(parsed.tzinfo)
+
+    def test_date_prefix(self):
+        parsed = _parse_date("2025-12-01 some trailing junk")
+        self.assertEqual((parsed.year, parsed.month, parsed.day), (2025, 12, 1))
+
+    def test_garbage_returns_none(self):
+        self.assertIsNone(_parse_date("not a date"))
+        self.assertIsNone(_parse_date(""))
+
+
+class ContextualRetrievalTests(TestCase):
+    def test_context_participates_in_matching(self):
+        session = ResearchSession.objects.create(title="t")
+        task = ResearchTask.objects.create(session=session, query="t")
+        source = Source.objects.create(
+            session=session, task=task, url="https://x.example/1",
+            content="body", content_hash="h1",
+        )
+        DocumentChunk.objects.create(
+            session=session, source=source, index=0,
+            text="The measured value was 4.2 units in the trial.",
+            context="This excerpt discusses zeppelin cargo capacity results.",
+        )
+        hits = retrieve(session.id, "zeppelin cargo capacity", top_k=3)
+        self.assertTrue(hits)
 
 
 class ApiTests(TestCase):

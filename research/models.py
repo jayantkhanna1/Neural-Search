@@ -8,6 +8,9 @@ class ResearchSession(models.Model):
 
     title = models.CharField(max_length=512)
     summary = models.TextField(blank=True, default="")
+    # Key claims extracted from the research with cross-source corroboration:
+    # [{"claim": str, "confidence": str, "source_urls": [str, ...]}, ...]
+    claims = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -43,6 +46,8 @@ class ResearchTask(models.Model):
     urls_found = models.PositiveIntegerField(default=0)
     sources_fetched = models.PositiveIntegerField(default=0)
     sources_kept = models.PositiveIntegerField(default=0)
+    rounds_completed = models.PositiveSmallIntegerField(default=0)
+    tokens_used = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
@@ -79,6 +84,7 @@ class Source(models.Model):
     summary = models.TextField(blank=True, default="")
     relevance_score = models.FloatField(default=0.0)
     quality_score = models.FloatField(default=0.0)
+    published_at = models.DateTimeField(null=True, blank=True)
     fetched_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -98,6 +104,11 @@ class DocumentChunk(models.Model):
     source = models.ForeignKey(Source, on_delete=models.CASCADE, related_name="chunks")
     index = models.PositiveIntegerField(default=0)
     text = models.TextField()
+    # Model-written situating sentence prepended at retrieval/index time
+    # (contextual retrieval); empty when disabled or generation failed.
+    context = models.TextField(blank=True, default="")
+    # Voyage AI embedding of (context + text); null when embeddings disabled.
+    embedding = models.JSONField(null=True, blank=True)
 
     class Meta:
         ordering = ["source_id", "index"]

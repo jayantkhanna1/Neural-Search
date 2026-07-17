@@ -16,6 +16,8 @@
     taskList: document.getElementById("task-list"),
     summaryCard: document.getElementById("summary-card"),
     summaryContent: document.getElementById("summary-content"),
+    claimsCard: document.getElementById("claims-card"),
+    claimsList: document.getElementById("claims-list"),
     sourcesCard: document.getElementById("sources-card"),
     sourceList: document.getElementById("source-list"),
     sourceCount: document.getElementById("source-count"),
@@ -27,6 +29,7 @@
 
   let currentSessionId = null;
   let pollTimer = null;
+  let eventSource = null;
 
   // ------------------------------------------------------------------ utils
   function csrfToken() {
@@ -121,6 +124,22 @@
     }
   }
 
+  function renderClaims(claimsData) {
+    const claims = claimsData || [];
+    if (!claims.length) { el.claimsCard.hidden = true; return; }
+    el.claimsCard.hidden = false;
+    el.claimsList.innerHTML = "";
+    claims.forEach((c) => {
+      const li = document.createElement("li");
+      const n = (c.source_urls || []).length;
+      li.innerHTML =
+        `<span class="badge ${escapeHtml(c.confidence || "low")}">${escapeHtml(c.confidence || "low")}</span>` +
+        `${escapeHtml(c.claim)}` +
+        `<span class="claim-sources">corroborated by ${n} source${n === 1 ? "" : "s"}</span>`;
+      el.claimsList.appendChild(li);
+    });
+  }
+
   function renderSources(sources) {
     if (!sources.length) { el.sourcesCard.hidden = true; return; }
     el.sourcesCard.hidden = false;
@@ -156,13 +175,40 @@
     el.sessionTitle.textContent = session.title;
     renderTasks(session.tasks);
     renderSummary(session);
+    renderClaims(session.claims);
     renderSources(session.sources);
     if (!opts.skipMessages) renderMessages(session.messages);
   }
 
-  // ----------------------------------------------------------------- polling
-  function stopPolling() {
+  // ------------------------------------------------------------ live updates
+  // Primary channel is Server-Sent Events; falls back to polling if the SSE
+  // connection fails (e.g. behind a buffering proxy).
+  function stopLiveUpdates() {
     if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+    if (eventSource) { eventSource.close(); eventSource = null; }
+  }
+
+  function startLiveUpdates() {
+    stopLiveUpdates();
+    if (!currentSessionId) return;
+    if (typeof EventSource !== "undefined") {
+      const sessionId = currentSessionId;
+      eventSource = new EventSource(`/api/sessions/${sessionId}/events/`);
+      eventSource.onmessage = (event) => {
+        if (sessionId !== currentSessionId) { stopLiveUpdates(); return; }
+        try {
+          const { session } = JSON.parse(event.data);
+          renderSession(session, { skipMessages: true });
+        } catch (err) { /* malformed frame; next one will recover */ }
+      };
+      eventSource.addEventListener("done", () => stopLiveUpdates());
+      eventSource.onerror = () => {
+        stopLiveUpdates();
+        pollTimer = setTimeout(pollSession, POLL_INTERVAL_MS);
+      };
+    } else {
+      pollTimer = setTimeout(pollSession, POLL_INTERVAL_MS);
+    }
   }
 
   async function pollSession() {
@@ -181,12 +227,12 @@
 
   // ----------------------------------------------------------------- actions
   async function openSession(sessionId) {
-    stopPolling();
+    stopLiveUpdates();
     currentSessionId = sessionId;
     const { session } = await api(`/api/sessions/${sessionId}/`);
     renderSession(session);
     refreshSessionList();
-    if (session.is_researching) pollTimer = setTimeout(pollSession, POLL_INTERVAL_MS);
+    if (session.is_researching) startLiveUpdates();
   }
 
   async function refreshSessionList() {
@@ -212,7 +258,7 @@
       currentSessionId = session.id;
       renderSession(session);
       refreshSessionList();
-      pollTimer = setTimeout(pollSession, POLL_INTERVAL_MS);
+      startLiveUpdates();
     } catch (err) {
       el.homeError.textContent = err.message;
       el.homeError.hidden = false;
@@ -238,10 +284,18 @@
       });
       pending.classList.remove("pending");
       pending.textContent = data.reply;
+      if (data.citations && data.citations.length) {
+        const cite = document.createElement("div");
+        cite.className = "msg-citations";
+        cite.innerHTML = "Sources: " + data.citations.map((c) =>
+          `<a href="${escapeHtml(c.url)}" target="_blank" rel="noopener noreferrer">[${c.n}] ${escapeHtml(c.title || c.url)}</a>`
+        ).join(" · ");
+        el.chatLog.appendChild(cite);
+        el.chatLog.scrollTop = el.chatLog.scrollHeight;
+      }
       if (data.research_task) {
         appendMessage("assistant", `🔍 Background research started: “${data.research_task.query}”`, "notice");
-        stopPolling();
-        pollTimer = setTimeout(pollSession, POLL_INTERVAL_MS);
+        startLiveUpdates();
       }
     } catch (err) {
       pending.remove();
@@ -254,7 +308,7 @@
   });
 
   el.newSessionBtn.addEventListener("click", () => {
-    stopPolling();
+    stopLiveUpdates();
     currentSessionId = null;
     el.sessionView.hidden = true;
     el.homeView.hidden = false;

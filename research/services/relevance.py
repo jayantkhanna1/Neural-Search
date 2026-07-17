@@ -6,6 +6,7 @@ kept source receives a combined quality score used for ranking.
 """
 
 import logging
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 from django.conf import settings
@@ -94,7 +95,12 @@ def score_relevance(query: str, pages: list[FetchedPage]) -> dict[str, float]:
     return scores
 
 
-def quality_score(url: str, relevance: float, content_length: int) -> float:
+def quality_score(
+    url: str,
+    relevance: float,
+    content_length: int,
+    published_at: datetime | None = None,
+) -> float:
     """Combine model relevance with cheap source-quality heuristics for ranking."""
     domain = urlparse(url).netloc.lower()
     bonus = 0.0
@@ -102,6 +108,11 @@ def quality_score(url: str, relevance: float, content_length: int) -> float:
         bonus += 0.02
     if any(hint in domain or hint in url.lower() for hint in _HIGH_QUALITY_DOMAIN_HINTS):
         bonus += 0.08
+    # Freshness: recent publications get a small boost that decays over ~2
+    # years; undated content is neither rewarded nor penalized.
+    if published_at is not None:
+        age_days = max(0.0, (datetime.now(timezone.utc) - published_at).days)
+        bonus += 0.05 * max(0.0, 1.0 - age_days / 730.0)
     # Reward substantive articles without letting sheer length dominate.
     length_factor = min(content_length / 8000.0, 1.0) * 0.1
     return round(min(1.0, relevance * 0.8 + bonus + length_factor), 4)

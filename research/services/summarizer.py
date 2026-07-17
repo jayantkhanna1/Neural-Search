@@ -1,6 +1,13 @@
-"""Per-source and consolidated summarization using the Haiku model."""
+"""Per-source and consolidated summarization using the Haiku model.
+
+Per-source summaries can optionally run through the Message Batches API
+(50% cost) when RESEARCH_USE_BATCH_SUMMARIES is enabled — appropriate for
+this pipeline, which favors thoroughness over speed.
+"""
 
 import logging
+
+from django.conf import settings
 
 from . import anthropic_client
 
@@ -25,21 +32,70 @@ _FINAL_SYSTEM = (
 )
 
 
+def _source_prompt(query: str, title: str, url: str, content: str) -> str:
+    return (
+        f"Research query: {query!r}\n"
+        f"Source: {title} ({url})\n\n"
+        f"Document:\n{content[:_SOURCE_EXCERPT_CHARS]}"
+    )
+
+
 def summarize_source(query: str, title: str, url: str, content: str) -> str:
     """Summarize one source. Returns an empty string on failure (non-fatal)."""
     try:
         return anthropic_client.complete(
             system=_SOURCE_SYSTEM,
-            user_content=(
-                f"Research query: {query!r}\n"
-                f"Source: {title} ({url})\n\n"
-                f"Document:\n{content[:_SOURCE_EXCERPT_CHARS]}"
-            ),
+            user_content=_source_prompt(query, title, url, content),
             max_tokens=400,
         ).strip()
     except anthropic_client.LLMError as exc:
         logger.warning("Source summary failed for %s: %s", url, exc)
         return ""
+
+
+def summarize_sources(query: str, sources, progress_callback=None) -> None:
+    """Fill in ``source.summary`` for every source in the list, in place.
+
+    Uses the Batches API (50% cost) when enabled and there is enough work to
+    justify the batch turnaround; individual failures fall back to sync calls.
+    ``sources`` are model instances with title/url/content/summary attributes;
+    callers persist them.
+    """
+    pending = [s for s in sources if not s.summary]
+    if not pending:
+        return
+
+    if settings.RESEARCH["USE_BATCH_SUMMARIES"] and len(pending) >= 4:
+        requests_params = [
+            (
+                f"src-{s.id}",
+                {
+                    "model": settings.ANTHROPIC_MODEL,
+                    "max_tokens": 400,
+                    "system": _SOURCE_SYSTEM,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": _source_prompt(query, s.title, s.url, s.content),
+                        }
+                    ],
+                },
+            )
+            for s in pending
+        ]
+        try:
+            results = anthropic_client.run_batch(requests_params)
+        except anthropic_client.LLMError as exc:
+            logger.warning("Batch summarization failed, falling back to sync: %s", exc)
+            results = {}
+        for s in pending:
+            s.summary = results.get(f"src-{s.id}", "").strip()
+
+    still_pending = [s for s in pending if not s.summary]
+    for i, s in enumerate(still_pending):
+        if progress_callback:
+            progress_callback(i, len(still_pending))
+        s.summary = summarize_source(query, s.title, s.url, s.content)
 
 
 def consolidate(query: str, sources: list[dict]) -> str:

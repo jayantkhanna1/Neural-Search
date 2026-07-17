@@ -2,8 +2,9 @@
 
 import json
 import logging
+import time
 
-from django.http import JsonResponse
+from django.http import JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.http import require_GET, require_http_methods
 
@@ -41,6 +42,8 @@ def _task_payload(task: ResearchTask) -> dict:
         "urls_found": task.urls_found,
         "sources_fetched": task.sources_fetched,
         "sources_kept": task.sources_kept,
+        "rounds_completed": task.rounds_completed,
+        "tokens_used": task.tokens_used,
         "error": task.error,
         "is_active": task.is_active,
         "created_at": task.created_at.isoformat(),
@@ -58,6 +61,7 @@ def _session_payload(session: ResearchSession, include_detail: bool = True) -> d
         payload.update(
             {
                 "summary": session.summary,
+                "claims": session.claims,
                 "tasks": [_task_payload(t) for t in session.tasks.all()],
                 "sources": [
                     {
@@ -68,6 +72,7 @@ def _session_payload(session: ResearchSession, include_detail: bool = True) -> d
                         "summary": s.summary,
                         "relevance_score": s.relevance_score,
                         "quality_score": s.quality_score,
+                        "published_at": s.published_at.isoformat() if s.published_at else None,
                     }
                     for s in session.sources.order_by("-quality_score")
                 ],
@@ -153,7 +158,42 @@ def send_message(request, session_id: int):
     return JsonResponse(
         {
             "reply": outcome.reply,
+            "citations": outcome.citations,
             "context_sources": outcome.context_sources,
             "research_task": task_payload,
         }
     )
+
+
+# Server-Sent Events: push session state while research is running, so the
+# UI gets instant stage updates without hammering the polling endpoint.
+_SSE_TICK_SECONDS = 1.5
+_SSE_MAX_TICKS = 1200  # ~30 minutes, matches the task hard time limit
+
+
+@require_GET
+def session_events(request, session_id: int):
+    get_object_or_404(ResearchSession, pk=session_id)
+
+    def stream():
+        last_sent = None
+        for _ in range(_SSE_MAX_TICKS):
+            try:
+                session = ResearchSession.objects.get(pk=session_id)
+            except ResearchSession.DoesNotExist:
+                break
+            payload = json.dumps({"session": _session_payload(session)})
+            if payload != last_sent:
+                last_sent = payload
+                yield f"data: {payload}\n\n"
+            else:
+                yield ": keep-alive\n\n"
+            if not any(t.is_active for t in session.tasks.all()):
+                yield "event: done\ndata: {}\n\n"
+                break
+            time.sleep(_SSE_TICK_SECONDS)
+
+    response = StreamingHttpResponse(stream(), content_type="text/event-stream")
+    response["Cache-Control"] = "no-cache"
+    response["X-Accel-Buffering"] = "no"
+    return response
