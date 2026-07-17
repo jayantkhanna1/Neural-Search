@@ -1,109 +1,70 @@
-{% load static %}
-<!DOCTYPE html>
+{% load static %}<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neural Search</title>
-
-    <link rel="stylesheet" href="{% static 'css/index.css' %}">
-    <style>
-        *{
-    padding: 0;
-    margin: 0;
-}
-#group_list{
-    margin-top: 25px;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    align-items: center;
-}
-#group_list a{
-    background-color: rgb(237, 237, 237);
-    border-radius: 12px;
-    border: 1px solid rgb(171, 171, 171);
-    margin-bottom: 25px;
-    text-decoration: none;
-    color: black;
-    padding: 10px 25%;
-}
-#new_group{
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    width: 100%;
-}
-
-#new_group a{
-    text-decoration: none;
-    color: black;
-    padding: 15px 20%;
-    border-radius: 12px;
-    color: white;
-
-    background-color: rgb(65 65 255);
-}
-#form{
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    width: 100%;
-    margin-top: 25px;
-}
-input, p{
-    margin-bottom: 25px;
-    border-radius: 12px;
-    border: 1px solid rgb(171, 171, 171);
-    padding: 10px 25%;
-}
-#imp_words{
-    display: flex;
-    flex-direction: column;
-    width: 60%;
-}
-.word{
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 100%;
-}
-.word input, .word p{
-    margin-right: 12px;
-    padding: 10px 15%;
-}
-button{
-    border-radius: 12px;
-    border: 1px solid rgb(171, 171, 171);
-    padding: 10px 25%;
-    background-color: rgb(65 65 255);
-    color: white;
-    margin-bottom: 25px;
-    cursor: pointer;
-}
-#queries{
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    width: 100%;
-}
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Neural Search — AI Research Assistant</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
 </head>
 <body>
-    <section id="group_list">
-        {% for x in group_list %}
-            <a href="group_page?group_id={{x.id}}">{{x.group}}</a>
-        {%endfor%}
-    </section>
-    <section id="new_group">
-        <a href="new_group_page">New Group</a>
-    </section>
+  {% csrf_token %}
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-dot"></span> Neural&nbsp;Search
+      </div>
+      <button id="new-session-btn" class="btn btn-secondary">+ New research</button>
+      <nav id="session-list" class="session-list" aria-label="Previous sessions"></nav>
+    </aside>
 
+    <main class="main">
+      <!-- Home / new search view -->
+      <section id="home-view" class="home-view">
+        <h1>What should I research for you?</h1>
+        <p class="subtitle">
+          I'll expand your query, read the web in the background, keep only relevant,
+          trustworthy sources, and summarize everything — then you can chat with the findings.
+        </p>
+        <form id="search-form" class="search-form">
+          <input id="search-input" type="text" maxlength="1000" autocomplete="off"
+                 placeholder="e.g. State of solid-state battery technology in 2026" required>
+          <button type="submit" class="btn btn-primary">Research</button>
+        </form>
+        <p id="home-error" class="error" hidden></p>
+      </section>
 
-    
+      <!-- Session view -->
+      <section id="session-view" class="session-view" hidden>
+        <header class="session-header">
+          <h2 id="session-title"></h2>
+        </header>
+
+        <div id="task-list" class="task-list"></div>
+
+        <div id="summary-card" class="card" hidden>
+          <div class="card-title">Research summary</div>
+          <div id="summary-content" class="summary-content"></div>
+        </div>
+
+        <details id="sources-card" class="card sources-card" hidden>
+          <summary class="card-title">Sources <span id="source-count"></span></summary>
+          <ul id="source-list" class="source-list"></ul>
+        </details>
+
+        <div class="card chat-card">
+          <div class="card-title">Chat with your research</div>
+          <div id="chat-log" class="chat-log" aria-live="polite"></div>
+          <form id="chat-form" class="chat-form">
+            <input id="chat-input" type="text" maxlength="4000" autocomplete="off"
+                   placeholder="Ask a follow-up, or say “research X” to expand the knowledge base…">
+            <button type="submit" class="btn btn-primary">Send</button>
+          </form>
+          <p id="chat-error" class="error" hidden></p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="{% static 'js/app.js' %}"></script>
 </body>
 </html>

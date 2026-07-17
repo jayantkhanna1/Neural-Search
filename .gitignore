@@ -1,1 +1,8 @@
 *.env
+!.env.example
+__pycache__/
+*.pyc
+db.sqlite3
+assets/
+celerybeat-schedule
+.DS_Store
